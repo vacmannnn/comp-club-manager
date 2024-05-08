@@ -98,6 +98,15 @@ func main() {
 			busyTables[act.tableNum-1] = true
 			freeTables--
 		case 3:
+			if freeTables > 0 {
+				fmt.Printf("%s 13 ICanWaitNoLonger!\n", line[0])
+				continue
+			}
+			if len(waiting)+1 > club.totalTables {
+				client.statusID = 11
+				fmt.Printf("%s 11 %s\n", line[0], act.userName)
+				continue
+			}
 			waiting.enqueue(act.userName)
 		case 4:
 			client.endTime = act.time
@@ -108,6 +117,7 @@ func main() {
 		}
 		clients[act.userName] = client
 	}
+	fmt.Println(lines[1][6:])
 	fmt.Printf("%v\n", clients)
 	fmt.Println(busyTables)
 }

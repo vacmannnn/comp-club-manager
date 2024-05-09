@@ -13,9 +13,15 @@ import (
 
 type clubInfo struct {
 	totalTables  int
-	startTime    time.Duration
+	seatTime     time.Duration
 	endTime      time.Duration
-	pricePerHour int
+	pricePerHour int64
+}
+
+type tableInfo struct {
+	timeUsed int64
+	profit   int64
+	isBusy   bool
 }
 
 type action struct {
@@ -26,11 +32,10 @@ type action struct {
 }
 
 type clientInfo struct {
-	startTime time.Duration
-	endTime   time.Duration
-	curTable  int
-	statusID  int
-	valid     bool
+	seatTime int64
+	curTable int
+	statusID int
+	valid    bool
 }
 
 type queue []string
@@ -48,6 +53,8 @@ func (q *queue) dequeue() string {
 func (q *queue) len() int {
 	return len(*q)
 }
+
+const millisecondsInHour = 3_600_000
 
 func main() {
 	if len(os.Args) != 2 {
@@ -71,31 +78,43 @@ func main() {
 	// TODO: why -1
 	var waiting queue
 	freeTables := club.totalTables
-	busyTables := make([]bool, club.totalTables)
+	tables := make([]tableInfo, club.totalTables+1)
 	clients := make(map[string]clientInfo)
 	for i := 3; i < len(lines)-1; i++ {
 		fmt.Println(lines[i])
 		line := strings.Split(lines[i], " ")
-		act, err := parseClient(line)
+		act, err := parseAct(line)
 		if err != nil {
 			continue // TODO
 		}
 		client := clients[act.userName]
 		switch act.id {
 		case 1:
-			if act.time < club.startTime {
+			if act.time < club.seatTime {
 				fmt.Printf("%s 13 NotOpenYet\n", line[0]) // TODO : show correct time
 				continue
 			}
-			if client.statusID%4 != 0 {
+			if client.statusID != 4 && client.statusID != 0 {
 				fmt.Printf("%s 13 YouShallNotPass\n", line[0])
 				continue
 			}
 			client.statusID = act.id
 		case 2:
-			client.startTime = act.time
-			client.curTable = act.tableNum - 1
-			busyTables[act.tableNum-1] = true
+			if tables[act.tableNum].isBusy {
+				fmt.Printf("%s 13 PlaceIsBusy\n", line[0])
+				continue
+			}
+			if client.statusID%10 == 2 {
+				tables[client.curTable].isBusy = false
+				tables[act.tableNum].isBusy = true
+				tables[client.curTable].timeUsed += act.time.Milliseconds() - client.seatTime
+				client.seatTime = act.time.Milliseconds()
+				client.curTable = act.tableNum
+			}
+			client.seatTime = act.time.Milliseconds()
+			client.curTable = act.tableNum
+			client.statusID = 2
+			tables[act.tableNum].isBusy = true
 			freeTables--
 		case 3:
 			if freeTables > 0 {
@@ -109,21 +128,62 @@ func main() {
 			}
 			waiting.enqueue(act.userName)
 		case 4:
-			client.endTime = act.time
-			busyTables[client.curTable] = false
-			freeTables++
+			// TODO: Добавить время, но еще округлить часы и добавить к цене за счет этого
+			timeUsed := act.time.Milliseconds() - client.seatTime
+			profit := (timeUsed / millisecondsInHour) * club.pricePerHour
+			if timeUsed%millisecondsInHour > 0 {
+				profit += club.pricePerHour
+			}
+
+			tables[client.curTable].timeUsed += timeUsed
+			tables[client.curTable].profit += profit
+			client.statusID = 4
+			if waiting.len() == 0 {
+				freeTables++
+				tables[client.curTable].isBusy = false
+				clients[act.userName] = client
+				continue
+			}
+			clientName := waiting.dequeue()
+			abc := clients[clientName]
+			abc.curTable = client.curTable
+			abc.seatTime = act.time.Milliseconds()
+			abc.statusID = 12
+			clients[clientName] = abc
+			fmt.Printf("%s 12 %s %d\n", line[0], act.userName, client.curTable)
 		default:
 			// TODO
 		}
 		clients[act.userName] = client
 	}
+	for k, v := range clients {
+		if v.statusID == 4 || v.statusID == 11 {
+			continue
+		}
+		timeUsed := club.endTime.Milliseconds() - v.seatTime
+		tables[v.curTable].timeUsed += timeUsed
+		profit := (timeUsed / millisecondsInHour) * club.pricePerHour
+		if timeUsed%millisecondsInHour > 0 {
+			profit += club.pricePerHour
+		}
+		tables[v.curTable].profit += profit
+		fmt.Printf("%s 11 %s\n", lines[1][6:], k)
+	}
 	fmt.Println(lines[1][6:])
-	fmt.Printf("%v\n", clients)
-	fmt.Println(busyTables)
+	for i, v := range tables {
+		if i == 0 {
+			continue
+		}
+
+		var t time.Time
+		t = t.Add(time.Duration(v.timeUsed) * time.Millisecond)
+
+		fmt.Printf("%d %d %s\n", i, v.profit, t.Format("15:04"))
+	}
 }
 
 // TODO: return error
-func parseClient(input []string) (action, error) {
+func parseAct(input []string) (action, error) {
 	actionTime, err := parseTime(input[0])
 	actionID, err := strconv.Atoi(input[1])
 
@@ -145,7 +205,7 @@ func readHeader(lines []string) (clubInfo, error) {
 
 	pricePerHour, err := strconv.Atoi(lines[2])
 
-	return clubInfo{totalTables: tables, startTime: stTime, endTime: endTime, pricePerHour: pricePerHour}, err
+	return clubInfo{totalTables: tables, seatTime: stTime, endTime: endTime, pricePerHour: int64(pricePerHour)}, err
 }
 
 // parseTime expects format "XX:YY", where XX - hours, YY - minutes

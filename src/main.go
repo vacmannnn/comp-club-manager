@@ -99,19 +99,19 @@ func main() {
 		client := clients[act.userName]
 		switch act.id {
 		case clientVisit:
-			if act.time < club.seatTime {
-				fmt.Printf("%s %d NotOpenYet\n", line[0], errorAction)
-				continue
+			if act.time < club.openTime {
+				fmt.Printf("%s %d NotOpenYet\n", line[0], errorID)
+				break
 			}
 			if client.statusID != clientLeft && client.statusID != clientLeftByHimself && client.statusID != 0 {
-				fmt.Printf("%s %d YouShallNotPass\n", line[0], errorAction)
-				continue
+				fmt.Printf("%s %d YouShallNotPass\n", line[0], errorID)
+				break
 			}
 			client.statusID = act.id
 		case clientSeat:
 			if tables[act.tableNum].isBusy {
-				fmt.Printf("%s %d PlaceIsBusy\n", line[0], errorAction)
-				continue
+				fmt.Printf("%s %d PlaceIsBusy\n", line[0], errorID)
+				break
 			}
 			if client.statusID%10 == 2 {
 				tables[client.curTable].isBusy = false
@@ -127,13 +127,13 @@ func main() {
 			freeTables--
 		case clientWaiting:
 			if freeTables > 0 {
-				fmt.Printf("%s %d ICanWaitNoLonger!\n", line[0], errorAction)
-				continue
+				fmt.Printf("%s %d ICanWaitNoLonger!\n", line[0], errorID)
+				break
 			}
 			if len(waiting)+1 > club.totalTables {
 				client.statusID = clientLeft
-				fmt.Printf("%s %d %s\n", line[0], clientLeft, act.userName)
-				continue
+				fmt.Println(line[0], clientLeft, act.userName)
+				break
 			}
 			waiting.enqueue(act.userName)
 		case clientLeftByHimself:
@@ -150,7 +150,7 @@ func main() {
 				freeTables++
 				tables[client.curTable].isBusy = false
 				clients[act.userName] = client
-				continue
+				break
 			}
 			clientName := waiting.dequeue()
 			abc := clients[clientName]

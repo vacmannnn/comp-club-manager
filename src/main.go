@@ -1,12 +1,23 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+)
+
+const (
+	clientVisit = iota + 1
+	clientSeat
+	clientWaiting
+	clientLeftByHimself
+	clientLeft = iota + 7
+	clientSeatAfterWaiting
+	errorAction
 )
 
 // TODO - именованные константы для ID
@@ -58,50 +69,48 @@ const millisecondsInHour = 3_600_000
 
 func main() {
 	if len(os.Args) != 2 {
-		log.Fatal() // TODO
+		log.Fatal("Expected format: ./app log_file.txt")
 	}
 
 	bytesRead, err := os.ReadFile(os.Args[1])
 	if err != nil {
-		log.Fatal(err) // TODO
+		log.Fatal(err)
 	}
 	fileContent := string(bytesRead)
 	lines := strings.Split(fileContent, "\n")
 
 	club, err := readHeader(lines)
-	// fmt.Println(club)
 	if err != nil {
 		log.Fatal(err) // TODO
 	}
 	fmt.Println(lines[1][:5])
 
-	// TODO: why -1
 	var waiting queue
 	freeTables := club.totalTables
 	tables := make([]tableInfo, club.totalTables+1)
 	clients := make(map[string]clientInfo)
-	for i := 3; i < len(lines)-1; i++ {
+	for i := 3; i < len(lines) && len(lines[i]) > 0; i++ {
 		fmt.Println(lines[i])
 		line := strings.Split(lines[i], " ")
 		act, err := parseAct(line)
 		if err != nil {
-			continue // TODO
+			log.Fatal(err)
 		}
 		client := clients[act.userName]
 		switch act.id {
-		case 1:
+		case clientVisit:
 			if act.time < club.seatTime {
-				fmt.Printf("%s 13 NotOpenYet\n", line[0]) // TODO : show correct time
+				fmt.Printf("%s %d NotOpenYet\n", line[0], errorAction)
 				continue
 			}
-			if client.statusID != 4 && client.statusID != 0 {
-				fmt.Printf("%s 13 YouShallNotPass\n", line[0])
+			if client.statusID != clientLeft && client.statusID != clientLeftByHimself && client.statusID != 0 {
+				fmt.Printf("%s %d YouShallNotPass\n", line[0], errorAction)
 				continue
 			}
 			client.statusID = act.id
-		case 2:
+		case clientSeat:
 			if tables[act.tableNum].isBusy {
-				fmt.Printf("%s 13 PlaceIsBusy\n", line[0])
+				fmt.Printf("%s %d PlaceIsBusy\n", line[0], errorAction)
 				continue
 			}
 			if client.statusID%10 == 2 {
@@ -113,22 +122,21 @@ func main() {
 			}
 			client.seatTime = act.time.Milliseconds()
 			client.curTable = act.tableNum
-			client.statusID = 2
+			client.statusID = clientSeat
 			tables[act.tableNum].isBusy = true
 			freeTables--
-		case 3:
+		case clientWaiting:
 			if freeTables > 0 {
-				fmt.Printf("%s 13 ICanWaitNoLonger!\n", line[0])
+				fmt.Printf("%s %d ICanWaitNoLonger!\n", line[0], errorAction)
 				continue
 			}
 			if len(waiting)+1 > club.totalTables {
-				client.statusID = 11
-				fmt.Printf("%s 11 %s\n", line[0], act.userName)
+				client.statusID = clientLeft
+				fmt.Printf("%s %d %s\n", line[0], clientLeft, act.userName)
 				continue
 			}
 			waiting.enqueue(act.userName)
-		case 4:
-			// TODO: Добавить время, но еще округлить часы и добавить к цене за счет этого
+		case clientLeftByHimself:
 			timeUsed := act.time.Milliseconds() - client.seatTime
 			profit := (timeUsed / millisecondsInHour) * club.pricePerHour
 			if timeUsed%millisecondsInHour > 0 {
@@ -137,7 +145,7 @@ func main() {
 
 			tables[client.curTable].timeUsed += timeUsed
 			tables[client.curTable].profit += profit
-			client.statusID = 4
+			client.statusID = clientLeftByHimself
 			if waiting.len() == 0 {
 				freeTables++
 				tables[client.curTable].isBusy = false
@@ -148,16 +156,16 @@ func main() {
 			abc := clients[clientName]
 			abc.curTable = client.curTable
 			abc.seatTime = act.time.Milliseconds()
-			abc.statusID = 12
+			abc.statusID = clientSeatAfterWaiting
 			clients[clientName] = abc
-			fmt.Printf("%s 12 %s %d\n", line[0], act.userName, client.curTable)
+			fmt.Printf("%s %d %s %d\n", line[0], clientSeatAfterWaiting, act.userName, client.curTable)
 		default:
-			// TODO
+			log.Fatal("Unknown action ID")
 		}
 		clients[act.userName] = client
 	}
 	for k, v := range clients {
-		if v.statusID == 4 || v.statusID == 11 {
+		if v.statusID == clientLeft || v.statusID == clientLeftByHimself {
 			continue
 		}
 		timeUsed := club.endTime.Milliseconds() - v.seatTime
@@ -167,7 +175,7 @@ func main() {
 			profit += club.pricePerHour
 		}
 		tables[v.curTable].profit += profit
-		fmt.Printf("%s 11 %s\n", lines[1][6:], k)
+		fmt.Printf("%s %d %s\n", lines[1][6:], clientLeft, k)
 	}
 	fmt.Println(lines[1][6:])
 	for i, v := range tables {
@@ -182,28 +190,57 @@ func main() {
 	}
 }
 
-// TODO: return error
 func parseAct(input []string) (action, error) {
 	actionTime, err := parseTime(input[0])
+	if err != nil {
+		return action{}, fmt.Errorf("incorrect time format, %s", err)
+	}
+
 	actionID, err := strconv.Atoi(input[1])
+	if err != nil {
+		return action{}, fmt.Errorf("incorrect action ID, %s", err)
+	}
 
 	var table int
 	if len(input) > 3 {
 		table, err = strconv.Atoi(input[3])
+		if table < 1 {
+			err = errors.New("table num should be greater then 0")
+		}
+	}
+	if err != nil {
+		return action{}, fmt.Errorf("incorrect table number, %s", err)
 	}
 
 	return action{time: actionTime, id: actionID, userName: input[2], tableNum: table}, err
 }
 
-// TODO: check if stTime > endTime and return first error
 func readHeader(lines []string) (clubInfo, error) {
 	tables, err := strconv.Atoi(lines[0])
+	if tables < 1 {
+		err = errors.New("total tables num should be greater then 0")
+	}
+	if err != nil {
+		return clubInfo{}, fmt.Errorf("incorrect tables number, %s", err)
+	}
 
 	timeStr := strings.Split(lines[1], " ")
 	stTime, err := parseTime(timeStr[0])
+	if err != nil {
+		return clubInfo{}, fmt.Errorf("incorrect time format, %s", err)
+	}
 	endTime, err := parseTime(timeStr[1])
+	if err != nil {
+		return clubInfo{}, fmt.Errorf("incorrect time format, %s", err)
+	}
 
 	pricePerHour, err := strconv.Atoi(lines[2])
+	if pricePerHour < 1 {
+		err = errors.New("total tables num should be greater then 0")
+	}
+	if err != nil {
+		return clubInfo{}, fmt.Errorf("incorrect price number, %s, it should be positive integer number", err)
+	}
 
 	return clubInfo{totalTables: tables, seatTime: stTime, endTime: endTime, pricePerHour: int64(pricePerHour)}, err
 }

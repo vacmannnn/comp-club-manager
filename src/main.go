@@ -18,6 +18,8 @@ const (
 	errorID
 )
 
+// todo: check if we really fail on first incorrect string
+
 type clubInfo struct {
 	totalTables  int
 	openTime     time.Duration

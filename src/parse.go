@@ -65,5 +65,13 @@ func parseHeader(lines []string) (clubInfo, error) {
 
 // parseTime expects format "XX:YY", where XX - hours, YY - minutes
 func parseTime(str string) (time.Duration, error) {
-	return time.ParseDuration(str[0:2] + "h" + str[3:5] + "m")
+	t, err := time.ParseDuration(str[0:2] + "h" + str[3:5] + "m")
+	fmt.Println(t)
+	if err != nil {
+		return t, err
+	}
+	if t.Milliseconds() > time.Hour.Milliseconds()*24 {
+		return t, errors.New("time should be less then 24 hour")
+	}
+	return t, nil
 }

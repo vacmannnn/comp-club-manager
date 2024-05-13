@@ -44,7 +44,7 @@ type clientInfo struct {
 	seatTime int64
 	curTable int
 	statusID int
-	valid    bool
+	//valid    bool
 }
 
 const millisecondsInHour = 3_600_000

@@ -9,11 +9,12 @@ import (
 )
 
 const (
-	clientVisit = iota + 1
+	notVisited = iota
+	clientVisit
 	clientSeat
 	clientWaiting
 	clientLeftByHimself
-	clientLeft = iota + 7
+	clientLeft = iota + 6
 	clientSeatAfterWaiting
 	errorID
 )
@@ -42,7 +43,6 @@ type clientInfo struct {
 	seatTime int64
 	curTable int
 	statusID int
-	//valid    bool
 }
 
 const millisecondsInHour = 3_600_000
@@ -109,13 +109,17 @@ func main() {
 			// the client moved to another table
 			if client.statusID%10 == 2 {
 				tables[client.curTable].isBusy = false
-				tables[act.tableNum].isBusy = true
 				profit, timeUsed := calcProfit(client.seatTime, act.time.Milliseconds(), club.pricePerHour)
 				tables[client.curTable].timeUsed += timeUsed
 				tables[client.curTable].profit += profit
 			} else {
+				if client.statusID != clientVisit {
+					fmt.Printf("%s %d ClientUnknown\n", line[0], errorID)
+					break
+				}
 				freeTables--
 			}
+			tables[act.tableNum].isBusy = true
 			client.seatTime = act.time.Milliseconds()
 			client.curTable = act.tableNum
 			client.statusID = clientSeat
@@ -130,9 +134,23 @@ func main() {
 				fmt.Println(line[0], clientLeft, act.userName)
 				break
 			}
+			if client.statusID%10 == 2 {
+				fmt.Printf("%s %d ClientPlayingAlready\n", line[0], errorID)
+				break
+			}
 			waiting.enqueue(act.userName)
 
 		case clientLeftByHimself:
+			if client.statusID == notVisited {
+				fmt.Println(line[0], errorID, "ClientUnknown")
+				break
+			}
+
+			// if someone left after waiting, not playing
+			if client.statusID%10 != 2 {
+				break
+			}
+
 			profit, timeUsed := calcProfit(client.seatTime, act.time.Milliseconds(), club.pricePerHour)
 			tables[client.curTable].timeUsed += timeUsed
 			tables[client.curTable].profit += profit
@@ -149,7 +167,7 @@ func main() {
 			waitedClient := clientInfo{curTable: client.curTable, seatTime: act.time.Milliseconds(),
 				statusID: clientSeatAfterWaiting}
 			clients[clientName] = waitedClient
-			fmt.Println(line[0], clientSeatAfterWaiting, act.userName, client.curTable)
+			fmt.Println(line[0], clientSeatAfterWaiting, clientName, client.curTable)
 
 		default:
 			log.Fatal("Unknown action ID")
@@ -159,7 +177,7 @@ func main() {
 
 	// check if all clients left
 	for k, v := range clients {
-		if v.statusID == clientLeft || v.statusID == clientLeftByHimself {
+		if v.statusID == clientLeft || v.statusID == clientLeftByHimself || v.statusID == notVisited {
 			continue
 		}
 		// possible case if client was in club, but he waited all the time and didn't seat at all

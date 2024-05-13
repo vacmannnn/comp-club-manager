@@ -1,0 +1,19 @@
+2
+09:00 12:00
+10
+08:48 1 andrew
+09:41 1 andrew
+09:48 1 andrew
+09:50 1 danil
+09:51 2 danil 1
+09:52 2 danil 1
+09:53 2 andrew 1
+09:54 2 mysteryPersonAnonymous 2
+09:55 3 andrew
+09:56 2 andrew 2
+10:00 3 alexander
+10:01 3 arsene
+10:01 3 kirill
+10:02 4 ksenia
+10:05 4 danil
+10:06 4 andrew

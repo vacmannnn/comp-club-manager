@@ -66,9 +66,11 @@ func main() {
 	fmt.Println(lines[1][:5])
 
 	var waiting queue
+	var previousActTime time.Duration
 	freeTables := club.totalTables
 	tables := make([]tableInfo, club.totalTables+1)
 	clients := make(map[string]clientInfo)
+
 	for i := 3; i < len(lines) && len(lines[i]) > 0; i++ {
 		fmt.Println(lines[i])
 
@@ -80,6 +82,11 @@ func main() {
 		if act.tableNum > club.totalTables {
 			log.Fatal("table number should be lower than total tables")
 		}
+		if act.time.Milliseconds() < previousActTime.Milliseconds() ||
+			act.time.Milliseconds() > club.closeTime.Milliseconds() {
+			log.Fatal("incorrect amount of time")
+		}
+		previousActTime = act.time
 		client := clients[act.userName]
 
 		switch act.id {

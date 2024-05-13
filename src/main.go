@@ -18,8 +18,6 @@ const (
 	errorID
 )
 
-// todo: check if we really fail on first incorrect string
-
 type clubInfo struct {
 	totalTables  int
 	openTime     time.Duration
@@ -78,6 +76,9 @@ func main() {
 		act, err := parseAct(line)
 		if err != nil {
 			log.Fatal(err)
+		}
+		if act.tableNum > club.totalTables {
+			log.Fatal("table number should be lower than total tables")
 		}
 		client := clients[act.userName]
 

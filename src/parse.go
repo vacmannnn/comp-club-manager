@@ -66,7 +66,6 @@ func parseHeader(lines []string) (clubInfo, error) {
 // parseTime expects format "XX:YY", where XX - hours, YY - minutes
 func parseTime(str string) (time.Duration, error) {
 	t, err := time.ParseDuration(str[0:2] + "h" + str[3:5] + "m")
-	fmt.Println(t)
 	if err != nil {
 		return t, err
 	}
